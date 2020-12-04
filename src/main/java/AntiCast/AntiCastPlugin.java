@@ -1,24 +1,123 @@
 package AntiCast;
 
-import java.util.logging.Logger;
+import java.util.LinkedList;
+
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockFormEvent;
+import org.bukkit.block.Block;
+import org.bukkit.Material;
+import org.bukkit.configuration.file.FileConfiguration;
 
 /*
  * AntiCast java plugin
  * 
  * @author Sam Belliveau (sam.belliveau@gmail.com)
  */
-public class AntiCastPlugin extends JavaPlugin {
-    private static final Logger LOGGER = Logger.getLogger("AntiCast");
-
-    public CastDetector detector = new CastDetector();
+public class AntiCastPlugin extends JavaPlugin implements Listener  {
+    FileConfiguration config = getConfig();
 
     public void onEnable() {
-        getServer().getPluginManager().registerEvents(detector, this);
-        LOGGER.info("Sam Belliveau's Anti Lava Cast Enabled");
+        
+        config.addDefault("bounds.x.min", -500);
+        config.addDefault("bounds.x.max", 500);
+        config.addDefault("bounds.y.min", -500);
+        config.addDefault("bounds.y.max", 500);
+
+        config.addDefault("casts.sampletime", 15.0); 
+        config.addDefault("casts.max.warn", 16);
+        config.addDefault("casts.max.stop", 24);       
+
+        config.addDefault("notifs.useAdminChannel", true);
+
+        config.options().copyDefaults(true);
+        saveConfig();
+        
+        getServer().getPluginManager().registerEvents(this, this);
     }
 
-    public void onDisable() {
-        LOGGER.info("Sam Belliveau's Anti Lava Cast Disabled");
+    /*********************/
+    /*** LISTENER PART ***/
+    /*********************/
+
+    // Booleans used to make sure console doesnt get spammed with messages
+    private boolean cancelled = false;
+    private LinkedList<Long> casts = new LinkedList<>();
+
+    @EventHandler
+    public void onCobbleFormation(BlockFormEvent e) {
+        // Get Config Values
+        final int MIN_X = config.getInt("bounds.x.min");
+        final int MAX_X = config.getInt("bounds.x.max");
+        final int MIN_Y = config.getInt("bounds.y.min");
+        final int MAX_Y = config.getInt("bounds.y.max");
+        
+        final int SAMPLE_TIME = (int)(config.getDouble("casts.sampletime") * 1000);
+        final int MAX_WARN = config.getInt("casts.max.warn");
+        final int MAX_STOP = config.getInt("casts.max.stop");
+
+        final boolean USE_ADMIN = config.getBoolean("notifs.useAdminChannel");
+
+        // The current time of this call
+        long now = System.currentTimeMillis();
+
+        // Get the information of the Block
+        Block block = e.getBlock();
+        Material type = block.getType();
+        int x = block.getX();
+        int y = block.getY();
+
+        // Check if x and y coords are valid
+        boolean xvalid = MIN_X <= x && x <= MAX_Y;
+        boolean yvalid = MIN_Y <= y && y <= MAX_Y;
+
+        if (xvalid && yvalid && (type == Material.LAVA || type == Material.WATER)) {
+            // Add time of cast to lists
+            casts.addLast(now);
+
+            // Ignore any casts that are too old
+            while(0 < casts.size() && SAMPLE_TIME < (now - casts.getFirst())) {
+                casts.removeFirst();
+            }
+
+            // Get number of casts in sample time
+            int size = casts.size();
+
+            // Check to see how many casts have happened
+            if(size > MAX_STOP) {
+                // Cancel the formation of cobble or any other block
+                e.setCancelled(true);
+                block.setType(Material.AIR);
+                
+                // Write message about lava cast being detected
+                if(!cancelled) {
+                    Broadcast.critical(String.format("Lavacasting At Spawn Detected! [%d, %d]", x, y), USE_ADMIN);
+                    Broadcast.critical("Temporarily Disabled Lava & Water Interactions At Spawn!", false);
+                    cancelled = true;
+                }
+
+            } else if (size > MAX_WARN) {
+                // Only write warning if the cast hasnt been cancelled
+                if(!cancelled) {
+                    long age = (now - casts.getFirst()) / 1000;
+                    String msg = String.format("%d casts at spawn in past %d secs [%d, %d]", size, age, x, y);
+                    Broadcast.warning(msg, USE_ADMIN);
+                } 
+                
+                // If it is cancelled, clear the block
+                else {
+                    e.setCancelled(true);
+                    block.setType(Material.AIR);
+                }
+            } else {
+                // Uncancel once the value gets low enough
+                if(cancelled) {
+                    Broadcast.good("Enabled Lava & Water Interactions At Spawn!", false);
+                    cancelled = false;
+                }
+            }
+        }
+        
     }
 }
