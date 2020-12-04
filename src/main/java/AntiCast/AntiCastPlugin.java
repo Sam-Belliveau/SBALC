@@ -68,7 +68,7 @@ public class AntiCastPlugin extends JavaPlugin implements Listener  {
         boolean xvalid = MIN_X <= x && x <= MAX_Y;
         boolean yvalid = MIN_Y <= y && y <= MAX_Y;
 
-        if (xvalid && yvalid && (type == Material.LAVA || type == Material.WATER)) {
+        if (xvalid && yvalid && type == Material.LAVA) {
             // Add time of cast to lists
             casts.addLast(now);
             lastX = x; 
@@ -105,6 +105,13 @@ public class AntiCastPlugin extends JavaPlugin implements Listener  {
 
         // Check to see how many casts have happened
         if(size > MAX_STOP) {
+            // Write message about lava cast being detected
+            if(!cancelled) {
+                Broadcast.critical(String.format("Lavacasting At Spawn Detected! [%d, %d]", lastX, lastY), USE_ADMIN);
+                Broadcast.critical("Temporarily Disabled Lava & Water Interactions At Spawn!", false);
+                cancelled = true;
+            }
+
             cancelled = true;
 
         } else if (size > MAX_WARN) {
@@ -127,20 +134,26 @@ public class AntiCastPlugin extends JavaPlugin implements Listener  {
         if (cmd.getName().equalsIgnoreCase("sbalc")) {
             refresh();
 
+            final int MIN_X = config.getInt("bounds.x.min");
+            final int MAX_X = config.getInt("bounds.x.max");
+            final int MIN_Y = config.getInt("bounds.y.min");
+            final int MAX_Y = config.getInt("bounds.y.max");
+
             final int CASTS  = casts.size();
             final double SAMPLE_TIME = config.getDouble("casts.sampletime");
 
-            sender.sendMessage(Broadcast.HEADER + Broadcast.GOOD + "SBALC v1.2:");
-            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - Current Interactions: ");
+            sender.sendMessage(Broadcast.HEADER + Broadcast.GOOD + "SBALC v1.2 Debug Menu:");
 
             if(cancelled) {
-                sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "        - Lava & Water: Disabled");
+                sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - Lava & Water: Disabled");
             } else {
-                sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "        - Lava & Water: Enabled");
+                sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - Lava & Water: Enabled");
             }
 
-            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "        - " + CASTS + " casts over " + SAMPLE_TIME + "s");
-            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "        - Coords of last cast: [" + lastX + ", " + lastY + "]");
+            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - " + CASTS + " casts over last " + SAMPLE_TIME + "s");
+            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - Coords of last cast: [" + lastX + ", " + lastY + "]");
+            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - AntiCast X Range [" + MIN_X + "..." + MAX_X + "]");
+            sender.sendMessage(Broadcast.HEADER + Broadcast.NORMAL + "    - AntiCast Y Range [" + MIN_Y + "..." + MAX_Y + "]");
 
             return true;
         }
